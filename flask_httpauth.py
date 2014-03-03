@@ -13,10 +13,12 @@ from hashlib import md5
 from random import Random, SystemRandom
 from flask import request, make_response, session
 
+
 class HTTPAuth(object):
     def __init__(self):
         def default_get_password(username):
             return None
+
         def default_auth_error():
             return "Unauthorized Access"
 
@@ -57,6 +59,7 @@ class HTTPAuth(object):
     def username(self):
         return request.authorization.username
 
+
 class HTTPBasicAuth(HTTPAuth):
     def __init__(self):
         super(HTTPBasicAuth, self).__init__()
@@ -70,18 +73,21 @@ class HTTPBasicAuth(HTTPAuth):
         self.verify_password_callback = f
 
     def authenticate_header(self):
-        return 'Basic realm="' + self.realm + '"'
+        return 'Basic realm="%s"' % self.realm
 
     def authenticate(self, auth, stored_password):
         client_password = auth.password
         if self.verify_password_callback:
-            return self.verify_password_callback(auth.username, client_password)
+            return self.verify_password_callback(auth.username,
+                                                 client_password)
         if self.hash_password_callback:
             try:
                 client_password = self.hash_password_callback(client_password)
             except TypeError:
-                client_password = self.hash_password_callback(auth.username, client_password)
+                client_password = self.hash_password_callback(auth.username,
+                                                              client_password)
         return client_password == stored_password
+
 
 class HTTPDigestAuth(HTTPAuth):
     def __init__(self):
@@ -94,21 +100,24 @@ class HTTPDigestAuth(HTTPAuth):
 
     def get_nonce(self):
         return md5(str(self.random.random()).encode('utf-8')).hexdigest()
-        
+
     def authenticate_header(self):
         session["auth_nonce"] = self.get_nonce()
         session["auth_opaque"] = self.get_nonce()
-        return 'Digest realm="' + self.realm + '",nonce="' + session["auth_nonce"] + '",opaque="' + session["auth_opaque"] + '"'
+        return ('Digest realm="%s",nonce="%s",opaque="%s"' %
+                (self.realm, session["auth_nonce"], session["auth_opaque"]))
 
     def authenticate(self, auth, password):
-        if not auth.username or not auth.realm or not auth.uri or not auth.nonce or not auth.response:
+        if (not auth.username or not auth.realm or not auth.uri
+           or not auth.nonce or not auth.response):
             return False
-        if auth.nonce != session.get("auth_nonce") or auth.opaque != session.get("auth_opaque"):
+        if (auth.nonce != session.get("auth_nonce")
+           or auth.opaque != session.get("auth_opaque")):
             return False
-        a1 = auth.username + ":" + auth.realm + ":" + password
+        a1 = '%s:%s:%s' % (auth.username, auth.realm, password)
         ha1 = md5(a1.encode('utf-8')).hexdigest()
-        a2 = request.method + ":" + auth.uri
+        a2 = "%s:%s" % (request.method, auth.uri)
         ha2 = md5(a2.encode('utf-8')).hexdigest()
-        a3 = ha1 + ":" + auth.nonce + ":" + ha2
+        a3 = "%s:%s:%s" % (ha1, auth.nonce, ha2)
         response = md5(a3.encode('utf-8')).hexdigest()
         return response == auth.response
